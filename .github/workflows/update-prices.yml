@@ -1,10 +1,13 @@
 name: Update prices
 
+# 自動スケジュールは停止中（遊々亭が GitHub Actions IP を 403 するため）。
+# 価格更新はローカルの update_prices.bat を使う。
+# 再開するときは下の schedule を有効化する。
 on:
-  schedule:
-    # 09:00 / 21:00 JST (= 00:00 / 12:00 UTC)
-    - cron: "0 0,12 * * *"
   workflow_dispatch:
+  # schedule:
+  #   # 09:00 / 21:00 JST (= 00:00 / 12:00 UTC)
+  #   - cron: "0 0,12 * * *"
 
 permissions:
   contents: write

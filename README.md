@@ -65,10 +65,12 @@ gh repo create dm-souba --public --source=. --remote=origin --push
 
 | Workflow | 内容 |
 |----------|------|
-| `update-prices.yml` | 毎日 09:00 / 21:00 JST に全弾取得 → `cards.json` を commit |
+| `update-prices.yml` | **スケジュール停止中**（手動 Run workflow のみ可）。通常の価格更新は `update_prices.bat` |
 | `ci.yml` | push / PR で JSON 検証 + `npm run build` |
 
-手動実行: Actions タブ → **Update prices** → **Run workflow**
+価格更新（推奨）: プロジェクト直下の `update_prices.bat` をダブルクリック
+
+手動実行（任意）: Actions タブ → **Update prices** → **Run workflow**
 
 初回はリポジトリ設定で Actions の write 権限が必要な場合があります（Settings → Actions → General → Workflow permissions → Read and write）。
 
