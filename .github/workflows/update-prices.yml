@@ -41,7 +41,7 @@ jobs:
           head -c 300 /tmp/yuyutei.html || true
 
       - name: Fetch Yuyutei prices
-        run: python fetch_yuyutei.py --all --delay 1.0
+        run: python fetch_yuyutei.py --all --delay 2.0
 
       - name: Validate cards.json
         run: python scripts/validate_cards.py

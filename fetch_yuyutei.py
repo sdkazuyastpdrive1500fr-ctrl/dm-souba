@@ -392,12 +392,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# 連続でこれだけ失敗したら IP ブロックとみなして中断する
+MAX_CONSECUTIVE_FAILURES = 10
+
+
 def main() -> None:
     args = parse_args()
     updated_at = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
     all_cards: list[dict] = []
 
     failed_sets: list[str] = []
+    consecutive_failures = 0
 
     with build_session() as session:
         if args.all:
@@ -410,9 +415,17 @@ def main() -> None:
             for i, set_code in enumerate(set_codes, start=1):
                 try:
                     all_cards.extend(fetch_set(session, set_code, updated_at, args.delay))
+                    consecutive_failures = 0
                 except FetchError as exc:
                     failed_sets.append(set_code)
+                    consecutive_failures += 1
                     print(f"  !! skip {set_code}: {exc}")
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                        raise FetchError(
+                            f"{MAX_CONSECUTIVE_FAILURES} 弾連続で取得に失敗したため中断します。"
+                            "アクセス元IPがブロックされている可能性が高いです。"
+                            f" (成功: {i - len(failed_sets)} 弾 / 失敗: {len(failed_sets)} 弾)"
+                        ) from exc
                 if i < len(set_codes):
                     time.sleep(args.delay)
         else:
