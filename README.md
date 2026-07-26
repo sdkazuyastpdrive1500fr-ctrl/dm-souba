@@ -4,8 +4,9 @@
 
 - **Scraper:** Python (`fetch_yuyutei.py`)
 - **Frontend:** Astro + Tailwind
-- **Hosting:** Cloudflare Pages（静的）
-- **更新:** GitHub Actions（1日2回）
+- **Hosting:** Cloudflare Workers（静的）
+- **公開URL:** `https://dm-souba.dm-info.workers.dev/`（ Domains で workers.dev を有効化したとき）
+- **更新:** ローカルの `update_prices.bat`（タスクスケジューラ 毎日 16:00）
 
 ## ローカル開発
 
@@ -48,18 +49,12 @@ gh repo create dm-souba --public --source=. --remote=origin --push
 
 （`gh` 未ログインの場合は先に `gh auth login`）
 
-## Cloudflare Pages 接続
+## Cloudflare 接続
 
-1. [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create** → **Pages** → Connect to Git
-2. リポジトリを選択
-3. ビルド設定:
-   - **Framework preset:** Astro
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Node version:** `22`（環境変数 `NODE_VERSION=22` でも可）
-4. Save and Deploy
+Worker 名: `dm-souba` / アカウント側サブドメイン: `dm-info`  
+→ URL: `https://dm-souba.dm-info.workers.dev/`
 
-以降、`main` への push（価格更新 Actions 含む）で自動デプロイされます。
+`main` への push で自動デプロイされます。workers.dev を無効にしている間は外部から 404 になります。
 
 ## GitHub Actions
 
