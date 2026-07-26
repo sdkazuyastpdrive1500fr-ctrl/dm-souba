@@ -1,0 +1,21 @@
+# プロジェクト概要: デュエマ（TCG）相場検索サイト
+
+## 1. 全体目標・設計方針
+- デュエル・マスターズの買取相場・価格比較サイトを開発・公開する。
+- サーバー代0円構成（Python + Astro + GitHub Actions + Cloudflare Pages）。
+- 初期フェーズでは「遊々亭」のWebサイトからデータ収集を開始し、MVP（最少限のWebサイト）を迅速に構築する。
+
+## 2. 技術スタック
+- **データ収集 (Scraper):** Python 3.10+, Requests, BeautifulSoup4
+- **データフォーマット:** `public/cards.json` + `public/meta.json`
+- **フロントエンド (Web UI):** Astro, Tailwind CSS
+- **インフラ / 自動化:** Cloudflare Pages (Static Hosting), GitHub Actions (Cron 1日2回自動巡回)
+
+## 3. 現在のフェーズ
+- **完了:** Step1 スクレイパー（販売・買取）, Step2 Astro UI, Phase3 Actions準備, Phase4 フィルタ/ページング, Phase5 スプレッド表示
+- **次:** GitHub リポジトリ公開 → Cloudflare Pages 接続 → 運用監視
+- **その後:** 履歴差分・他ショップ横断比較
+
+## 4. AIエンジニアとしての行動指針
+- コードを記述・提案する際は、解説は極力シンプルにし、すぐに実行・コピー＆ペースト可能なコードを提供する。
+- エラーが発生した場合は、原因特定と修正コードを提示する。

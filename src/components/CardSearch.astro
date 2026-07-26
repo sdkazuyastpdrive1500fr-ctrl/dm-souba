@@ -1,0 +1,381 @@
+---
+---
+
+<section id="card-search" class="relative z-10 mx-auto w-full max-w-5xl px-4 pb-20 sm:px-6" aria-live="polite">
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <label class="block flex-1">
+        <span class="mb-2 block font-display text-xs font-semibold uppercase tracking-[0.18em] text-mist-500">
+          Search
+        </span>
+        <input
+          id="search-input"
+          type="search"
+          placeholder="カード名で検索（例: ボルシャック）"
+          autocomplete="off"
+          class="w-full border-0 border-b-2 border-mist-500/40 bg-transparent px-0 py-3 font-body text-lg text-mist-100 outline-none transition placeholder:text-mist-500/70 focus:border-ember-500"
+        />
+      </label>
+      <label class="sm:w-52">
+        <span class="mb-2 block font-display text-xs font-semibold uppercase tracking-[0.18em] text-mist-500">
+          Sort
+        </span>
+        <select
+          id="sort-select"
+          class="w-full appearance-none border-0 border-b-2 border-mist-500/40 bg-transparent py-3 font-body text-base text-mist-100 outline-none focus:border-ember-500"
+        >
+          <option value="sell-desc">販売価格が高い順</option>
+          <option value="sell-asc">販売価格が安い順</option>
+          <option value="buy-desc">買取価格が高い順</option>
+          <option value="buy-asc">買取価格が安い順</option>
+          <option value="spread-desc">スプレッドが大きい順</option>
+          <option value="name-asc">名前順</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <label>
+        <span class="mb-2 block font-display text-xs font-semibold uppercase tracking-[0.18em] text-mist-500">
+          Rarity
+        </span>
+        <select
+          id="rarity-select"
+          class="w-full appearance-none border-0 border-b-2 border-mist-500/40 bg-transparent py-2.5 font-body text-sm text-mist-100 outline-none focus:border-ember-500"
+        >
+          <option value="">すべて</option>
+        </select>
+      </label>
+      <label>
+        <span class="mb-2 block font-display text-xs font-semibold uppercase tracking-[0.18em] text-mist-500">
+          Set
+        </span>
+        <input
+          id="set-input"
+          type="text"
+          list="set-datalist"
+          placeholder="例: dm01"
+          autocomplete="off"
+          class="w-full border-0 border-b-2 border-mist-500/40 bg-transparent py-2.5 font-body text-sm text-mist-100 outline-none placeholder:text-mist-500/70 focus:border-ember-500"
+        />
+        <datalist id="set-datalist"></datalist>
+      </label>
+      <label>
+        <span class="mb-2 block font-display text-xs font-semibold uppercase tracking-[0.18em] text-mist-500">
+          Price
+        </span>
+        <select
+          id="availability-select"
+          class="w-full appearance-none border-0 border-b-2 border-mist-500/40 bg-transparent py-2.5 font-body text-sm text-mist-100 outline-none focus:border-ember-500"
+        >
+          <option value="all">すべて</option>
+          <option value="both">販売・買取あり</option>
+          <option value="sell">販売あり</option>
+          <option value="buy">買取あり</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="mt-6 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+    <p id="result-meta" class="font-display text-sm tracking-wide text-mist-500">読み込み中…</p>
+    <p id="updated-meta" class="font-body text-xs text-mist-500/80"></p>
+  </div>
+
+  <ul id="result-list" class="mt-4 divide-y divide-white/10" role="list"></ul>
+
+  <div class="mt-6 flex justify-center">
+    <button
+      id="load-more"
+      type="button"
+      class="hidden border border-white/15 px-6 py-2.5 font-display text-sm tracking-wide text-mist-300 transition hover:border-ember-500/60 hover:text-white"
+    >
+      もっと見る
+    </button>
+  </div>
+
+  <p id="empty-state" class="mt-10 hidden text-center font-body text-mist-500">
+    該当するカードが見つかりませんでした。
+  </p>
+</section>
+
+<script>
+  type Card = {
+    id: string;
+    name: string;
+    sub_info: string;
+    buy_price: number | null;
+    sell_price: number | null;
+    spread?: number | null;
+    shop: string;
+    updated_at: string;
+    set_code?: string | null;
+    rarity?: string | null;
+    buy_url?: string | null;
+    sell_url?: string | null;
+  };
+
+  type Meta = {
+    updated_at?: string;
+    count?: number;
+    rarities?: string[];
+    set_codes?: string[];
+  };
+
+  const PAGE_SIZE = 50;
+
+  const listEl = document.getElementById("result-list") as HTMLUListElement;
+  const metaEl = document.getElementById("result-meta") as HTMLParagraphElement;
+  const updatedEl = document.getElementById("updated-meta") as HTMLParagraphElement;
+  const emptyEl = document.getElementById("empty-state") as HTMLParagraphElement;
+  const loadMoreEl = document.getElementById("load-more") as HTMLButtonElement;
+  const inputEl = document.getElementById("search-input") as HTMLInputElement;
+  const sortEl = document.getElementById("sort-select") as HTMLSelectElement;
+  const rarityEl = document.getElementById("rarity-select") as HTMLSelectElement;
+  const setEl = document.getElementById("set-input") as HTMLInputElement;
+  const availabilityEl = document.getElementById("availability-select") as HTMLSelectElement;
+  const setListEl = document.getElementById("set-datalist") as HTMLDataListElement;
+
+  let cards: Card[] = [];
+  let filteredCache: Card[] = [];
+  let visibleCount = PAGE_SIZE;
+  let query = "";
+  let sort = "sell-desc";
+  let rarity = "";
+  let setCode = "";
+  let availability = "all";
+
+  function formatPrice(price: number | null | undefined): string {
+    if (price == null) return "—";
+    return `${price.toLocaleString("ja-JP")} 円`;
+  }
+
+  function spreadOf(card: Card): number | null {
+    if (card.spread != null) return card.spread;
+    if (card.buy_price != null && card.sell_price != null) {
+      return card.sell_price - card.buy_price;
+    }
+    return null;
+  }
+
+  function comparePrice(a: number | null, b: number | null, desc: boolean): number {
+    if (a == null && b == null) return 0;
+    if (a == null) return 1;
+    if (b == null) return -1;
+    return desc ? b - a : a - b;
+  }
+
+  function compare(a: Card, b: Card): number {
+    if (sort === "sell-asc") return comparePrice(a.sell_price, b.sell_price, false);
+    if (sort === "sell-desc") return comparePrice(a.sell_price, b.sell_price, true);
+    if (sort === "buy-asc") return comparePrice(a.buy_price, b.buy_price, false);
+    if (sort === "buy-desc") return comparePrice(a.buy_price, b.buy_price, true);
+    if (sort === "spread-desc") return comparePrice(spreadOf(a), spreadOf(b), true);
+    return a.name.localeCompare(b.name, "ja");
+  }
+
+  function matchesAvailability(card: Card): boolean {
+    const hasBuy = card.buy_price != null;
+    const hasSell = card.sell_price != null;
+    if (availability === "both") return hasBuy && hasSell;
+    if (availability === "sell") return hasSell;
+    if (availability === "buy") return hasBuy;
+    return true;
+  }
+
+  function rebuildFiltered(): void {
+    const q = query.trim().toLowerCase();
+    const setQ = setCode.trim().toLowerCase();
+
+    filteredCache = cards.filter((c) => {
+      if (q && !c.name.toLowerCase().includes(q)) return false;
+      if (rarity && (c.rarity || "") !== rarity) return false;
+      if (setQ && !(c.set_code || "").toLowerCase().includes(setQ)) return false;
+      if (!matchesAvailability(c)) return false;
+      return true;
+    });
+    filteredCache.sort(compare);
+    visibleCount = PAGE_SIZE;
+  }
+
+  function primaryUrl(card: Card): string | null {
+    return card.sell_url || card.buy_url || null;
+  }
+
+  function syncQueryParam(): void {
+    const params = new URLSearchParams(window.location.search);
+    const q = query.trim();
+    if (q) params.set("q", q);
+    else params.delete("q");
+    const next = params.toString();
+    const url = next ? `${window.location.pathname}?${next}` : window.location.pathname;
+    window.history.replaceState(null, "", url);
+  }
+
+  function render(): void {
+    const items = filteredCache;
+    metaEl.textContent =
+      query.trim() === ""
+        ? `${items.length.toLocaleString("ja-JP")} 件の相場`
+        : `「${query.trim()}」 ${items.length.toLocaleString("ja-JP")} 件`;
+
+    emptyEl.classList.toggle("hidden", items.length > 0);
+    listEl.innerHTML = "";
+
+    const frag = document.createDocumentFragment();
+    const shown = items.slice(0, visibleCount);
+
+    for (const card of shown) {
+      const li = document.createElement("li");
+      li.className =
+        "group grid grid-cols-1 gap-3 py-4 transition hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1.4fr)_minmax(0,0.7fr)_auto] sm:items-center sm:gap-x-4";
+
+      const nameBlock = document.createElement("div");
+      nameBlock.className = "min-w-0";
+
+      const href = primaryUrl(card);
+      const name = document.createElement(href ? "a" : "p");
+      name.className =
+        "block truncate font-body text-base font-medium text-mist-100 transition group-hover:text-white sm:text-lg";
+      name.textContent = card.name;
+      if (href) {
+        (name as HTMLAnchorElement).href = href;
+        (name as HTMLAnchorElement).target = "_blank";
+        (name as HTMLAnchorElement).rel = "noopener noreferrer";
+      }
+
+      const sub = document.createElement("p");
+      sub.className = "mt-1 truncate text-sm text-mist-500";
+      sub.textContent = card.sub_info;
+
+      nameBlock.append(name, sub);
+
+      const meta = document.createElement("div");
+      meta.className = "min-w-0";
+      const spread = spreadOf(card);
+      const spreadText =
+        spread == null ? "" : `<p class="mt-1 text-xs text-mist-500">差 ${spread.toLocaleString("ja-JP")} 円</p>`;
+      meta.innerHTML = `<p class="text-sm text-mist-500">${card.shop}</p>${spreadText}`;
+
+      const priceBlock = document.createElement("div");
+      priceBlock.className = "flex gap-5 sm:justify-end sm:gap-6";
+      priceBlock.innerHTML = `
+        <div class="text-left sm:text-right">
+          <p class="font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-mist-500">販売</p>
+          <p class="mt-1 font-display text-lg font-bold tabular-nums text-mist-100 sm:text-xl">${formatPrice(card.sell_price)}</p>
+        </div>
+        <div class="text-left sm:text-right">
+          <p class="font-display text-[10px] font-semibold uppercase tracking-[0.16em] text-mist-500">買取</p>
+          <p class="mt-1 font-display text-lg font-bold tabular-nums text-ember-400 sm:text-xl">${formatPrice(card.buy_price)}</p>
+        </div>
+      `;
+
+      li.append(nameBlock, meta, priceBlock);
+      frag.append(li);
+    }
+
+    listEl.append(frag);
+    loadMoreEl.classList.toggle("hidden", visibleCount >= items.length);
+  }
+
+  function populateFilters(meta: Meta | null): void {
+    const rarities =
+      meta?.rarities?.length
+        ? meta.rarities
+        : [...new Set(cards.map((c) => c.rarity).filter(Boolean) as string[])].sort();
+    for (const r of rarities) {
+      const opt = document.createElement("option");
+      opt.value = r;
+      opt.textContent = r;
+      rarityEl.append(opt);
+    }
+
+    const sets =
+      meta?.set_codes?.length
+        ? meta.set_codes
+        : [...new Set(cards.map((c) => c.set_code).filter(Boolean) as string[])].sort();
+    for (const s of sets) {
+      const opt = document.createElement("option");
+      opt.value = s;
+      setListEl.append(opt);
+    }
+
+    if (meta?.updated_at) {
+      updatedEl.textContent = `最終取得: ${meta.updated_at}`;
+    } else if (cards[0]?.updated_at) {
+      updatedEl.textContent = `最終取得: ${cards[0].updated_at}`;
+    }
+  }
+
+  async function init(): Promise<void> {
+    try {
+      const [cardsRes, metaRes] = await Promise.all([
+        fetch("/cards.json"),
+        fetch("/meta.json").catch(() => null),
+      ]);
+      if (!cardsRes.ok) throw new Error(`HTTP ${cardsRes.status}`);
+      cards = (await cardsRes.json()) as Card[];
+
+      let meta: Meta | null = null;
+      if (metaRes && metaRes.ok) {
+        meta = (await metaRes.json()) as Meta;
+      }
+      populateFilters(meta);
+
+      const params = new URLSearchParams(window.location.search);
+      const initialQ = params.get("q") || "";
+      if (initialQ) {
+        query = initialQ;
+        inputEl.value = initialQ;
+      }
+
+      rebuildFiltered();
+      render();
+    } catch (err) {
+      metaEl.textContent = "データの読み込みに失敗しました。";
+      console.error(err);
+    }
+  }
+
+  function onFilterChange(): void {
+    rebuildFiltered();
+    syncQueryParam();
+    render();
+  }
+
+  let timer = 0;
+  function scheduleSearch(): void {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      query = inputEl.value;
+      onFilterChange();
+    }, 120);
+  }
+
+  inputEl.addEventListener("input", scheduleSearch);
+  inputEl.addEventListener("change", scheduleSearch);
+  inputEl.addEventListener("search", scheduleSearch);
+
+  sortEl.addEventListener("change", () => {
+    sort = sortEl.value;
+    onFilterChange();
+  });
+  rarityEl.addEventListener("change", () => {
+    rarity = rarityEl.value;
+    onFilterChange();
+  });
+  setEl.addEventListener("input", () => {
+    setCode = setEl.value;
+    onFilterChange();
+  });
+  availabilityEl.addEventListener("change", () => {
+    availability = availabilityEl.value;
+    onFilterChange();
+  });
+  loadMoreEl.addEventListener("click", () => {
+    visibleCount += PAGE_SIZE;
+    render();
+  });
+
+  init();
+</script>

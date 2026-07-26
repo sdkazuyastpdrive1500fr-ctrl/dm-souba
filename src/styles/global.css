@@ -1,0 +1,19 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Outfit:wght@500;700;800&display=swap");
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Noto Sans JP", system-ui, sans-serif;
+  color: #e8eef8;
+  background: #070b16;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(232, 59, 42, 0.35);
+  color: #fff;
+}
