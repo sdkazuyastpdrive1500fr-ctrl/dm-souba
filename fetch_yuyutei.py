@@ -20,6 +20,8 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 BASE_URL = "https://yuyu-tei.jp"
 SET_URL = f"{BASE_URL}/{{mode}}/dm/s/{{set_code}}"
@@ -35,17 +37,48 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+    "Referer": f"{BASE_URL}/",
 }
 
 PRICE_RE = re.compile(r"([\d,]+)\s*円")
 SET_SKIP = {"search", "searchSP", "ultra", "special"}
 
 
+class FetchError(RuntimeError):
+    """取得に失敗したことを示す。原因を必ずメッセージに含める。"""
+
+
+def build_session() -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=4,
+        connect=3,
+        read=3,
+        backoff_factor=2.0,
+        status_forcelist=(403, 408, 429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        respect_retry_after_header=True,
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.headers.update(HEADERS)
+    return session
+
+
 def fetch_html(session: requests.Session, url: str) -> str:
-    response = session.get(url, headers=HEADERS, timeout=30)
-    response.raise_for_status()
-    response.encoding = response.apparent_encoding or "utf-8"
+    try:
+        response = session.get(url, timeout=30)
+    except requests.RequestException as exc:
+        raise FetchError(f"{url} への接続に失敗: {exc}") from exc
+
+    if response.status_code != 200:
+        snippet = " ".join(response.text[:300].split())
+        raise FetchError(f"{url} が HTTP {response.status_code} を返しました: {snippet}")
+
+    # Content-Type に charset があればそれを使う (apparent_encoding は大きいページで遅い)
+    if not response.encoding or response.encoding.lower() == "iso-8859-1":
+        response.encoding = response.apparent_encoding or "utf-8"
     return response.text
 
 
@@ -54,6 +87,42 @@ def parse_price(text: str) -> int | None:
     if not match:
         return None
     return int(match.group(1).replace(",", ""))
+
+
+def load_known_set_codes() -> list[str]:
+    """過去に取得した meta.json から収録弾一覧を読む (一覧ページ取得失敗時の保険)。"""
+    for path in (OUTPUT_PATH.parent / "meta.json", OUTPUT_PATH_ROOT.parent / "meta.json"):
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        codes = [str(c).strip().lower() for c in data.get("set_codes") or [] if str(c).strip()]
+        if codes:
+            print(f"[INFO] fallback set list from {path} ({len(codes)} sets)")
+            return codes
+    return []
+
+
+def resolve_set_codes(session: requests.Session) -> list[str]:
+    seed_url = SET_URL.format(mode="buy", set_code="sale")
+    print(f"[GET] set list from {seed_url}")
+    try:
+        set_codes = extract_set_codes(fetch_html(session, seed_url))
+    except FetchError as exc:
+        print(f"[WARN] 収録弾一覧の取得に失敗: {exc}")
+        set_codes = []
+
+    if not set_codes:
+        set_codes = load_known_set_codes()
+
+    if not set_codes:
+        raise FetchError(
+            "収録弾一覧を取得できませんでした。"
+            "遊々亭側でブロックされているか、サイト構造が変わった可能性があります。"
+        )
+    return set_codes
 
 
 def extract_set_codes(html: str) -> list[str]:
@@ -328,14 +397,11 @@ def main() -> None:
     updated_at = datetime.now(JST).strftime("%Y-%m-%d %H:%M:%S")
     all_cards: list[dict] = []
 
-    with requests.Session() as session:
+    failed_sets: list[str] = []
+
+    with build_session() as session:
         if args.all:
-            seed_url = SET_URL.format(mode="buy", set_code="sale")
-            print(f"[GET] set list from {seed_url}")
-            seed_html = fetch_html(session, seed_url)
-            set_codes = extract_set_codes(seed_html)
-            if not set_codes:
-                raise RuntimeError("収録弾一覧を取得できませんでした。サイト構造が変わった可能性があります。")
+            set_codes = resolve_set_codes(session)
 
             if args.limit_sets > 0:
                 set_codes = set_codes[: args.limit_sets]
@@ -343,9 +409,9 @@ def main() -> None:
             print(f"[INFO] {len(set_codes)} sets to fetch (buy + sell)")
             for i, set_code in enumerate(set_codes, start=1):
                 try:
-                    cards = fetch_set(session, set_code, updated_at, args.delay)
-                    all_cards.extend(cards)
-                except requests.HTTPError as exc:
+                    all_cards.extend(fetch_set(session, set_code, updated_at, args.delay))
+                except FetchError as exc:
+                    failed_sets.append(set_code)
                     print(f"  !! skip {set_code}: {exc}")
                 if i < len(set_codes):
                     time.sleep(args.delay)
@@ -355,7 +421,13 @@ def main() -> None:
 
     cards = merge_cards(all_cards)
     if not cards:
-        raise RuntimeError("カードを1件も取得できませんでした。")
+        raise FetchError(
+            "カードを1件も取得できませんでした。"
+            f" 失敗した弾: {len(failed_sets)} 件。遊々亭へのアクセスがブロックされている可能性があります。"
+        )
+
+    if failed_sets:
+        print(f"[WARN] {len(failed_sets)} sets failed: {', '.join(failed_sets[:20])}")
 
     save_cards(cards)
 
