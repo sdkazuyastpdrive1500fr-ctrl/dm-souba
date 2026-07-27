@@ -11,3 +11,9 @@ _tmp_*.html
 venv/
 .env
 .env.*
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
