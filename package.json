@@ -6,17 +6,23 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview",
+    "preview": "npm run build && wrangler dev",
     "fetch": "python fetch_yuyutei.py",
     "fetch:all": "python fetch_yuyutei.py --all",
-    "validate": "python scripts/validate_cards.py"
+    "validate": "python scripts/validate_cards.py",
+    "deploy": "npm run build && wrangler deploy",
+    "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "12",
     "@astrojs/tailwind": "^6.0.2",
     "astro": "^5.12.0",
     "tailwindcss": "^3.4.17"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "wrangler": "^4.114.0"
   }
 }
